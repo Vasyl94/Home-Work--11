@@ -1,138 +1,107 @@
-import Notiflix from "notiflix";
-
 import SimpleLightbox from "simplelightbox";
+import "simplelightbox/dist/simple-lightbox.min.css";
+import Notiflix from "notiflix";
+import { getImage } from "./getImages";
 
-import SearchImages from "./fetchImages";
+let pagecount = 1;
+let hits = 0;
+let totalHits = 0;
+let search = "";
+const imagesOnPage = 40;
 
-import LoadMoreBtn from "./components/LoadMoreBtn";
+const form = document.querySelector('form');
+const input = document.querySelector('input');
+const gallery = document.querySelector('.gallery');
+const btn = document.querySelector(".load-more");
+form.addEventListener('submit', onSubmitBtnClick);
+btn.addEventListener('click', onLoadMoreBtnClick);
+btn.classList.add("visually-hidden");
 
-//  all imports
+ const simpleLightbox = new SimpleLightbox('.gallery a', {
+          captionsData: 'alt',
+          captionDelay: 250, })
 
-const submitBut = document.querySelector(".submit-button");
-
-const input = document.querySelector(".input")
-
-const caseImages = document.querySelector(".gallery");
-
-const form = document.querySelector(".search-form");
-
-
-// all HTML elements
-
-const searchImages =  new  SearchImages();
-
-const loadMoreBtn = new LoadMoreBtn({
-  selector: "#loadMoreBtn",
-  isHidden: true,
-});
-
-
-
-form.addEventListener("submit",onSubmit)
-loadMoreBtn.button.addEventListener("click", fetchMoreImages);
-
-function onSubmit(e) {
+async function onSubmitBtnClick(e) {
+  hits = 0;
+  btn.classList.add("visually-hidden")
   e.preventDefault();
-
-  const form = e.currentTarget;
-  searchImages.searchQuery = form.elements.searchinfo.value.trim();
- 
-  clearNewsList()
-  searchImages.resetPage();
-  loadMoreBtn.show();
-
-
-
-  fetchMoreImages()
-}
-
- async function fetchMoreImages() {
-  loadMoreBtn.disable();
-try {
-const newSearch = await searchImages.fetchImages()
-
-if (newSearch.data.hits.length === 0) {
-  Notiflix.Notify.failure("Sorry, there are no images matching your search query. Please try again.")
-  loadMoreBtn.hide();
-}
-
-else if (newSearch.data.hits.length  < 40) {
-  createMarkup(newSearch.data);
-  loadMoreBtn.hide();
-  Notiflix.Notify.failure("We're sorry, but you've reached the end of search results.")
-}
- else {
-  createMarkup(newSearch.data)
-  loadMoreBtn.enable();
- }
+  search = input.value.trim();
+  gallery.innerHTML = "";
+  console.log(search);
+  pagecount = 1;
 
 
   
-} catch (err) {
-  onError(err)
-} finally {
-  form.reset()
-}
-  
-  
-   
-}
-
-
-
-
-
-function createMarkup({hits}) {
-    const markup = hits.map(({webformatURL,largeImageURL,tags,likes,views,comments,downloads}) => `
-    <div class="photo-card">
-    <a class = "gallery-item" href = "${largeImageURL}">
-  <img src="${webformatURL}" alt="${tags}" loading="lazy" />
-  <div class="info">
-    <p class="info-item">
-      <b>Likes:</b>
-      ${likes}
-    </p>
-    <p class="info-item">
-      <b>${views}</b>
-    </p>
-    <p class="info-item">
-      <b>${comments}</b>
-    </p>
-    <p class="info-item">
-      <b>${downloads}</b>
-    </p>
-  </div>
-</div>
-    `).join("");
-    caseImages.insertAdjacentHTML("beforeend",markup) 
-    gallery.refresh()
-}
-
-function clearNewsList() {
-  caseImages.innerHTML = "";
-}
-
-// function scroll() {
-//   const { height: cardHeight } = document
-//     .querySelector('.gallery')
-//     .firstElementChild.getBoundingClientRect();
-
-//   window.scrollBy({
-//     top: cardHeight * 2,
-//     behavior: 'smooth',
-//   });
-// }
-
-function onError(err) {
-    console.error(err);
-    clearNewsList()
-    Notiflix.Notify.failure("Sorry,there are no images matching your search query.Please try again")
+  try {if (search !== "") {
+   const images = await getImage(search, pagecount);
+      renderImageCard(images.hits);
+      simpleLightbox.refresh();
+      if (images.totalHits === 0) {
+        Notiflix.Notify.failure('Sorry, there are no images matching your search query.Please try again.');
+        return
+      } else if (images.totalHits >= 1 && images.totalHits <= imagesOnPage) {
+       totalHits = images.totalHits;
+        console.log(totalHits);
+        Notiflix.Notify.success(`"Hooray! We found ${totalHits} images."`);
+        Notiflix.Notify.info("We're sorry, but you've reached the end of search results."); } 
+      else if(images.totalHits > imagesOnPage){
+        totalHits = images.totalHits;
+        console.log(totalHits);
+        Notiflix.Notify.success(`"Hooray! We found ${totalHits} images."`)
+        pagecount += 1;
+        btn.classList.remove("visually-hidden")
+      }
+    }}
+  catch(error){
+      console.log(error)
+      Notiflix.Notify.failure('Sorry, there are no images matching your search query. Please try again.')
+      gallery.innerHTML = "";
+      search = "";
+    };
   }
 
-  
-  const gallery = new SimpleLightbox('.gallery a', {
-    captions: true,
-    captionsData: "alt",
-    captionDelay: 250,
-  });
-   
+    
+async function onLoadMoreBtnClick() {
+  console.log(search)
+  console.log(hits);
+  try {
+  const images = await getImage(search, pagecount)
+  renderImageCard(images.hits);
+  simpleLightbox.refresh();
+
+  pagecount += 1;
+  if (totalHits <= (pagecount-1)* 40) {
+    console.log(pagecount)
+    btn.classList.add("visually-hidden");
+    Notiflix.Notify.info("We're sorry, but you've reached the end of search results.");
+  }
+}
+ catch(error){console.log(error)}
+}
+
+function renderImageCard(images) {
+   let imagesMarkup = images.map(({ webformatURL, largeImageURL, tags, likes, views, comments, downloads }) => {
+    hits += 1;
+    return `<div class="photo-card">
+   <a class="gallery__link" href="${largeImageURL}">
+  <img src="${webformatURL}" alt="${tags}" loading="lazy"/>
+  </a>
+  <div class="info">
+    <p class="info-item">
+      <b>Likes: ${likes}</b>
+    </p>
+    <p class="info-item">
+      <b>Views: ${views}</b>
+    </p>
+    <p class="info-item">
+      <b>Comments: ${comments}</b>
+    </p>
+    <p class="info-item">
+      <b>Downloads: ${downloads}</b>
+    </p>
+  </div>
+</div>`
+  }).join(' ');
+    gallery.insertAdjacentHTML('beforeend', imagesMarkup);
+}
+
